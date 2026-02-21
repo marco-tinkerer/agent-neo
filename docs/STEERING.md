@@ -109,7 +109,7 @@ Use this section to leave notes for future sessions:
 - Any blockers or issues
 ```
 
-**Current Status:** v0.3 complete - Agent working with LiteLLM and streaming responses.
+**Current Status:** v0.4 - Community gateway validated with tools support. Ready for Strands integration.
 
 ### Session 2026-01-28
 - Initialized project with UV
@@ -117,6 +117,17 @@ Use this section to leave notes for future sessions:
 - Switched to httpx for direct API calls
 - Implemented AgentNeo with streaming responses
 - All core functionality working
+
+### Session 2026-02-19
+- Tested community Hailo Ollama Gateway as alternative to hailo-ollama (to enable tools/Strands support)
+- Root cause of hailo-ollama limitation: returns HTTP 500 on any request with `tools` field
+- Community gateway uses hailo_platform.genai Python API - needs system site-packages venv
+- Initial model (Qwen2-1.5B-Instruct-Function-Calling-v1.hef) incompatible with HailoRT 5.1.1 (requires 5.2.0)
+- Switched to Qwen2.5-1.5B-Instruct.hef - compatible with HailoRT 5.1.1
+- **Tools field test PASSED** - gateway accepts tools without errors
+- Gateway startup: requires `.venv_with_system` env in `/home/marcomark/Documents/code-projects/ollama_gateway`
+- See `docs/GATEWAY_TEST_SESSION.md` for full details and startup instructions
+- Next: Strands integration
 
 ### Session 2026-01-29
 - Replaced httpx with LiteLLM for unified LLM interface
