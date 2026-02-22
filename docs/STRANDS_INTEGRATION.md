@@ -338,8 +338,110 @@ See the "Known Risk" section below.
 **Resolution taken: Option B — AWS Bedrock (Claude Haiku)**
 Switched `strands_agent.py` to use `BedrockModel` with `us.anthropic.claude-haiku-4-5-20251001-v1:0`. All 4 end-to-end tests passed with correct tool invocation.
 
-**Outstanding hardware gap:**
-The dedicated function-calling model `Qwen2-1.5B-Instruct-Function-Calling-v1.hef` requires **HailoRT 5.2.0** (currently on 5.1.1). Upgrading HailoRT is a future task that would allow switching back to local inference. See `strands_agent.py` for the swap instructions.
+**HailoRT upgrade status (2026-02-21): BLOCKED — Python bindings ABI incompatible**
+
+Hardware is fully upgraded and working. Python bindings are the blocker.
+
+Detailed state:
+- `hailort 5.2.0` runtime installed (replaces `h10-hailort 5.1.1`)
+- `hailort-pcie-driver 5.2.0` installed (DKMS module built and installed)
+- 5.2.0 firmware active after reboot: `hailortcli fw-control identify` shows firmware 5.2.0, HAILO10H
+- `/dev/hailo0` present
+- `python3-h10-hailort 5.1.1` retained; compatibility symlinks created (`/usr/lib/libhailort.so.5.1.1 → /usr/lib/libhailort.so.5.2.0`) — but import still fails
+- Rollback debs at `~/Downloads/hailort-5.1.1-backup/`
+
+**Root cause of Python bindings failure (confirmed 2026-02-21):**
+
+The `Speech2TextGeneratorParams` constructor changed its signature between 5.1.1 and 5.2.0 — a `float` parameter (likely `repetition_penalty`) was added. This changes the C++ mangled symbol name:
+
+| Version | Symbol |
+|---------|--------|
+| 5.1.1 bindings expect | `...Speech2TextGeneratorParamsC1...string_view` |
+| 5.2.0 library exports | `...Speech2TextGeneratorParamsC1...string_viewf` (extra `f` = float) |
+
+The compatibility symlink allows the `.so` to load `libhailort`, but cannot invent missing symbols. The Python bindings must be recompiled against 5.2.0.
+
+**`python3-hailort 4.23.0`** (available in apt) is the Hailo-8 product line — not applicable to H10H.
+
+**Paths under investigation:**
+1. Build `pyhailort` from source against 5.2.0 headers (requires Hailo GitHub source)
+2. Obtain pre-built 5.2.0 bindings from Hailo developer zone
+3. User-identified alternatives (TBD)
+4. Roll back to 5.1.1 (bindings work, but function-calling HEF model won't load)
+
+**Next steps after reboot** (run in order, stop and report on any failure):
+
+**Step 5 — Verify hardware:**
+```bash
+hailortcli --version          # must show 5.2.0
+hailortcli fw-control identify  # must show Hailo-10H device info, no errors
+ls -la /dev/hailo0            # device node must exist
+```
+
+**Step 6 — Start gateway with function-calling model and verify:**
+```bash
+cd /home/marcomark/Documents/code-projects/ollama_gateway
+export HAILO_HEF_PATH=/home/marcomark/hailo-models/Qwen2-1.5B-Instruct-Function-Calling-v1.hef
+source .venv_with_system/bin/activate
+python hailo_ollama_gateway.py &
+sleep 5
+curl -s http://localhost:11434/api/tags   # must list hailo-llm
+```
+Stop and report if VDevice() init fails with error code 8 — that means Python bindings ABI incompatibility.
+
+**Step 7 — Confirm existing agent still works (still uses Bedrock):**
+```bash
+cd /home/marcomark/Documents/code-projects/agent-neo
+uv run python -c "
+from agent_neo.strands_agent import create_agent
+agent = create_agent()
+agent('What time is it?')
+"
+```
+
+**Step 8 — Switch strands_agent.py to OllamaModel** (only after Step 6 passes):
+
+File: `src/agent_neo/strands_agent.py` — replace entire contents with:
+```python
+"""Strands-based agent for Agent Neo using local Hailo NPU inference."""
+
+from strands import Agent
+from strands.models.ollama import OllamaModel
+
+from .config import GATEWAY_BASE, GATEWAY_MODEL, REQUEST_TIMEOUT
+from .tools import get_current_time, get_weather
+
+SYSTEM_PROMPT = """You are Agent Neo, a helpful AI assistant running on a Raspberry Pi with the AI HAT+ 2. Be concise and helpful."""
+
+
+def create_agent() -> Agent:
+    """Create and return a configured Strands Agent instance."""
+    model = OllamaModel(
+        host=GATEWAY_BASE,
+        model_id=GATEWAY_MODEL,
+        ollama_client_args={"timeout": REQUEST_TIMEOUT},
+    )
+
+    return Agent(
+        model=model,
+        tools=[get_current_time, get_weather],
+        system_prompt=SYSTEM_PROMPT,
+    )
+```
+
+**Step 9 — Re-run all 4 Phase 1 test prompts against local model:**
+```
+"What time is it?"
+"What's the weather in London?"
+"What's the weather in Tokyo and what time is it?"
+"Tell me a joke"
+```
+Pass criteria: tool calls fire on local Hailo NPU (verify gateway logs show model activity).
+
+**Step 10 — Update docs and commit** (after Step 9 passes):
+- Mark this section resolved in `STRANDS_INTEGRATION.md`
+- Add session note to `STEERING.md`
+- Remove `BEDROCK_MODEL_ID` constant from `strands_agent.py` (already done in Step 8 above)
 
 ---
 
@@ -356,40 +458,113 @@ The dedicated function-calling model `Qwen2-1.5B-Instruct-Function-Calling-v1.he
 
 ---
 
-## Phase 2 Preview (Future Work)
+## Phase 2 Task List — Remaining Tools
 
-Once Phase 1 is confirmed working, the next tools to implement:
+**Status:** 🟡 IN PROGRESS
+**Goal:** Add MQTT, Lambda, and Polly tools to complete the prototype tool breadth.
 
-### Tool 3: MQTT Publisher
-```python
-@tool
-def publish_mqtt_message(topic: str, payload: str) -> str:
-    """Publish a message to an MQTT broker topic."""
+### Phase 2 — Task 1: Install paho-mqtt
+**Status:** 🔴 NOT STARTED
+
+```bash
+uv add paho-mqtt
 ```
-- Library: `paho-mqtt`
-- Broker: TBD (likely local or AWS IoT Core)
-- Config needed: broker host, port, credentials
 
-### Tool 4: AWS Lambda Invocation
-```python
-@tool
-def invoke_lambda(function_name: str, payload: str) -> str:
-    """Invoke an AWS Lambda function and return its response."""
+Verify:
+```bash
+uv run python -c "import paho.mqtt.client; print('paho-mqtt OK')"
 ```
-- Library: `boto3`
-- Config needed: AWS region, credentials (IAM role or access keys)
-- Synchronous invocation (RequestResponse), return decoded result
 
-### Tool 5: Amazon Polly TTS
+`boto3` is already installed (came in with `strands-agents`) — no new packages needed for Lambda or Polly.
+
+---
+
+### Phase 2 — Task 2: Create test Lambda function
+**Status:** 🔴 NOT STARTED
+
+A simple test function must be deployed to AWS before the Lambda tool can be tested.
+
+**Function name:** `agent-neo-test`
+**Runtime:** Python 3.13
+**Region:** `us-east-1`
+
+**Handler code:**
 ```python
-@tool
-def text_to_speech(text: str, output_file: str = "output.mp3") -> str:
-    """Convert text to speech using Amazon Polly and save as audio file."""
+import json
+
+def lambda_handler(event, context):
+    return {
+        "statusCode": 200,
+        "message": f"agent-neo-test received: {json.dumps(event)}"
+    }
 ```
-- Library: `boto3`
-- Config needed: AWS region, voice ID (e.g. `Joanna`)
-- Returns path to saved audio file
-- Future: pipe directly to audio output on Pi
+
+**Deployment steps (via boto3):**
+1. Create IAM execution role with `AWSLambdaBasicExecutionRole` policy
+2. Zip the handler code
+3. Create the Lambda function with the role ARN
+4. Wait for `State: Active`
+5. Invoke with a test payload to verify
+
+**Notes:**
+- IAM user `Mark` (account `130843671546`) needs `lambda:CreateFunction`, `lambda:InvokeFunction`, `iam:CreateRole`, `iam:AttachRolePolicy`, `iam:PassRole`
+- If permission errors occur, stop and report — do not attempt workarounds
+- Role name: `agent-neo-lambda-role`
+
+---
+
+### Phase 2 — Task 3: Add 3 new tools to `tools.py`
+**Status:** 🔴 NOT STARTED
+
+**Tool 3: `publish_mqtt_message`**
+- Broker: `test.mosquitto.org` (public, no auth, port 1883)
+- Connects, publishes, disconnects — synchronous single-shot pattern
+- Returns confirmation string with topic and payload
+
+**Tool 4: `invoke_lambda`**
+- Parameters: `function_name: str`, `payload: str` (JSON string)
+- Uses `boto3` Lambda client with `InvocationType="RequestResponse"`
+- Decodes and returns the response payload
+- Timeout: 30 seconds
+
+**Tool 5: `text_to_speech`**
+- Parameters: `text: str`, `output_file: str = "speech.mp3"`
+- Uses `boto3` Polly client, voice `Joanna`, format `mp3`
+- Saves audio to `output_file` path
+- Returns the path to the saved file
+
+---
+
+### Phase 2 — Task 4: Register new tools in `strands_agent.py`
+**Status:** 🔴 NOT STARTED
+
+Add the 3 new tools to the `tools` list in `create_agent()`.
+
+---
+
+### Phase 2 — Task 5: End-to-end test all 3 new tools
+**Status:** 🔴 NOT STARTED
+
+**Test prompts:**
+
+| Prompt | Expected behaviour |
+|--------|-------------------|
+| `"Publish 'hello from Agent Neo' to the topic agent-neo/test"` | `publish_mqtt_message` called, confirmation returned |
+| `"Invoke the agent-neo-test Lambda with the payload hello world"` | `invoke_lambda` called, Lambda response returned |
+| `"Say 'Hello, I am Agent Neo' using text to speech"` | `text_to_speech` called, `speech.mp3` saved, path returned |
+
+**Pass criteria:**
+- Each tool is invoked (not hallucinated)
+- MQTT: no connection errors from `test.mosquitto.org`
+- Lambda: response payload decoded and returned
+- Polly: `speech.mp3` file exists and is non-zero bytes
+
+---
+
+### Phase 2 — Task 6: Update documentation
+**Status:** 🔴 NOT STARTED
+
+Update `STEERING.md` session notes and task statuses in this file.
 
 ---
 
@@ -397,23 +572,16 @@ def text_to_speech(text: str, output_file: str = "output.mp3") -> str:
 
 **What we're building:** Strands-based agent with tool calling on Raspberry Pi + Hailo NPU
 
-**Current task:** Start at Task 1 (none started yet)
-
-**Key constraint:** Community gateway must be running before any testing (port 11434). hailo-ollama (port 8000) is for the old LiteLLM agent only.
+**Current status:** Phase 1 complete. Phase 2 in progress (5 tools total: time, weather, MQTT, Lambda, Polly).
 
 **Approach philosophy (from STEERING.md):**
 - Ask permission before modifying code
 - Work one task at a time, test before moving on
 - Stop and report if a blocker is hit — do not attempt workarounds
 
-**Run existing agent (LiteLLM, stable):**
+**Run agent:**
 ```bash
 uv run agent-neo
-```
-
-**Run new Strands agent (once built):**
-```bash
-uv run python src/agent_neo/chat.py
 ```
 
 ---

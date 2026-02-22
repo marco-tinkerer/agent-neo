@@ -129,7 +129,7 @@ Use this section to leave notes for future sessions:
 - See `docs/GATEWAY_TEST_SESSION.md` for full details and startup instructions
 - Next: Strands integration
 
-### Session 2026-02-21
+### Session 2026-02-21 (Part 1)
 - Completed full Strands integration (Phase 1)
 - Removed LiteLLM; added strands-agents, httpx, ollama packages
 - Created tools.py (get_current_time, get_weather via wttr.in)
@@ -139,6 +139,30 @@ Use this section to leave notes for future sessions:
 - Cut over main.py to Strands agent; deleted agent.py, provider.py, chat.py
 - Outstanding: upgrade HailoRT to 5.2.0 to use function-calling HEF model for local inference
 - Next: Phase 2 tools (MQTT, AWS Lambda, Amazon Polly)
+
+### Session 2026-02-21 (Part 2) — HailoRT 5.1.1 → 5.2.0 upgrade
+- Backed up all 5.1.1 packages to `~/Downloads/hailort-5.1.1-backup/`
+- Installed `hailort 5.2.0` runtime and `hailort-pcie-driver 5.2.0`
+- Package naming changed: `h10-hailort` → `hailort` (no h10 prefix in 5.2.0)
+- Old PCIe driver removed first (naming conflict), then force-removed `h10-hailort`
+- `python3-h10-hailort 5.1.1` retained (no 5.2.0 Python 3.13 package exists anywhere)
+- Created compatibility symlinks so Python bindings still resolve:
+  `/usr/lib/libhailort.so.5.1.1 → /usr/lib/libhailort.so.5.2.0`
+- DKMS module built and installed for kernel 6.12.62+rpt-rpi-2712
+- Reboot required to flash new SoC firmware (dmesg showed driver 5.2.0 vs pci_ep 5.1.1 mismatch)
+- **NEXT SESSION: reboot first, then follow Steps 5–10 in STRANDS_INTEGRATION.md "Known Risk" section**
+
+### Session 2026-02-21 (Part 3) — Python bindings ABI investigation
+- Rebooted; HailoRT 5.2.0 hardware verified: CLI 5.2.0, firmware 5.2.0 (app), HAILO10H, `/dev/hailo0` present
+- Community gateway started but ran in **mock mode** — `hailo_platform` Python bindings fail to import
+- Root cause confirmed via `nm`: ABI break between `python3-h10-hailort 5.1.1` and `libhailort.so.5.2.0`
+  - 5.1.1 Python bindings call: `Speech2TextGeneratorParams(Speech2TextTask, string_view)` — 2 params
+  - 5.2.0 library exports: `Speech2TextGeneratorParams(Speech2TextTask, string_view, float)` — 3 params
+  - The added `float` (likely `repetition_penalty`) changes the mangled symbol name — old `.so` can't find it
+- `python3-hailort 4.23.0` (in apt) is the Hailo-8 product line — not compatible with H10H
+- No 5.2.0 Python bindings for H10H/Python 3.13 found in apt or PyPI
+- Options under investigation: build from source (Hailo GitHub), await Hailo release, roll back to 5.1.1, user has additional alternatives to try
+- **NEXT SESSION: continue Python bindings investigation**
 
 ### Session 2026-01-29
 - Replaced httpx with LiteLLM for unified LLM interface
@@ -208,9 +232,10 @@ See `docs/HAILO_SERVER.md` for full server documentation.
 ## Quick Reference
 
 **Project:** Agent Neo
-**Tech Stack:** Python 3.13, UV, Strands Agents SDK, AWS Bedrock (Claude Haiku)
-**Model (current):** `us.anthropic.claude-haiku-4-5-20251001-v1:0` via Bedrock
-**Model (target):** `Qwen2-1.5B-Instruct-Function-Calling-v1.hef` via community gateway (requires HailoRT 5.2.0)
+**Tech Stack:** Python 3.13, UV, Strands Agents SDK, AWS Bedrock (Claude Haiku, temporary)
+**Model (current):** `us.anthropic.claude-haiku-4-5-20251001-v1:0` via Bedrock — pending switch to local
+**Model (target):** `Qwen2-1.5B-Instruct-Function-Calling-v1.hef` via community gateway
+**HailoRT:** 5.2.0 installed, awaiting reboot to activate new SoC firmware
 **Run command:** `uv run agent-neo`
 
 ---
