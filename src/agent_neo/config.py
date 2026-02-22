@@ -1,8 +1,8 @@
 """Configuration settings for Agent Neo."""
 
-# LLM provider settings
-MODEL_ID = "ollama/qwen2:1.5b"
-API_BASE = "http://localhost:8000"
+# Community gateway settings
+GATEWAY_BASE = "http://localhost:11434"
+GATEWAY_MODEL = "hailo-llm"
 
 # Request settings
 REQUEST_TIMEOUT = 120.0  # seconds

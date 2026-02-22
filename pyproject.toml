@@ -5,7 +5,9 @@ description = "Python agent using LiteLLM with local hailo-ollama LLM"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "litellm>=1.81.5",
+    "httpx>=0.28.1",
+    "ollama>=0.6.1",
+    "strands-agents>=1.27.0",
 ]
 
 [project.scripts]

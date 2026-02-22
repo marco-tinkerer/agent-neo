@@ -109,7 +109,7 @@ Use this section to leave notes for future sessions:
 - Any blockers or issues
 ```
 
-**Current Status:** v0.4 - Community gateway validated with tools support. Ready for Strands integration.
+**Current Status:** v0.5 - Strands integration complete. Full tool-calling loop validated via AWS Bedrock. HailoRT upgrade to 5.2.0 needed to switch back to local inference.
 
 ### Session 2026-01-28
 - Initialized project with UV
@@ -128,6 +128,17 @@ Use this section to leave notes for future sessions:
 - Gateway startup: requires `.venv_with_system` env in `/home/marcomark/Documents/code-projects/ollama_gateway`
 - See `docs/GATEWAY_TEST_SESSION.md` for full details and startup instructions
 - Next: Strands integration
+
+### Session 2026-02-21
+- Completed full Strands integration (Phase 1)
+- Removed LiteLLM; added strands-agents, httpx, ollama packages
+- Created tools.py (get_current_time, get_weather via wttr.in)
+- Created strands_agent.py with Strands Agent + tool registration
+- Discovered Qwen2.5-1.5B-Instruct does not reliably invoke tools
+- Switched to AWS Bedrock (Claude Haiku) — all 4 end-to-end tests passed
+- Cut over main.py to Strands agent; deleted agent.py, provider.py, chat.py
+- Outstanding: upgrade HailoRT to 5.2.0 to use function-calling HEF model for local inference
+- Next: Phase 2 tools (MQTT, AWS Lambda, Amazon Polly)
 
 ### Session 2026-01-29
 - Replaced httpx with LiteLLM for unified LLM interface
@@ -197,9 +208,9 @@ See `docs/HAILO_SERVER.md` for full server documentation.
 ## Quick Reference
 
 **Project:** Agent Neo
-**Tech Stack:** Python 3.13, UV, LiteLLM, hailo-ollama
-**API Base:** `http://localhost:8000`
-**Model:** `ollama/qwen2:1.5b`
+**Tech Stack:** Python 3.13, UV, Strands Agents SDK, AWS Bedrock (Claude Haiku)
+**Model (current):** `us.anthropic.claude-haiku-4-5-20251001-v1:0` via Bedrock
+**Model (target):** `Qwen2-1.5B-Instruct-Function-Calling-v1.hef` via community gateway (requires HailoRT 5.2.0)
 **Run command:** `uv run agent-neo`
 
 ---

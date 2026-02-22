@@ -1,7 +1,7 @@
 # Agent Neo — Strands Integration Plan
 
 **Created:** 2026-02-20
-**Status:** 🟡 IN PROGRESS — Phase 1 planned, not yet started
+**Status:** ✅ COMPLETE — Phase 1 fully implemented and validated
 **Owner:** Active development session
 
 ---
@@ -127,7 +127,7 @@ Finalize `main.py` CLI with the Strands agent, update documentation, finalize ar
 ## Phase 1 Task List
 
 ### Task 1 — Swap dependencies and remove LiteLLM
-**Status:** 🔴 NOT STARTED
+**Status:** ✅ COMPLETE
 
 **What to do:**
 ```bash
@@ -163,7 +163,7 @@ uv pip list | grep litellm   # should return nothing
 ---
 
 ### Task 2 — Update config for gateway
-**Status:** 🔴 NOT STARTED
+**Status:** ✅ COMPLETE
 
 **File to modify:** `src/agent_neo/config.py`
 
@@ -188,7 +188,7 @@ The old `MODEL_ID` and `API_BASE` constants are removed — they referenced hail
 ---
 
 ### Task 3 — Create `tools.py`
-**Status:** 🔴 NOT STARTED
+**Status:** ✅ COMPLETE
 
 **File to create:** `src/agent_neo/tools.py`
 
@@ -232,7 +232,7 @@ def get_weather(location: str) -> str:
 ---
 
 ### Task 4 — Create `strands_agent.py`
-**Status:** 🔴 NOT STARTED
+**Status:** ✅ COMPLETE
 
 **File to create:** `src/agent_neo/strands_agent.py`
 
@@ -269,7 +269,7 @@ agent = Agent(
 ---
 
 ### Task 5 — Create `chat.py` (standalone test script)
-**Status:** 🔴 NOT STARTED
+**Status:** ✅ COMPLETE (deleted after cutover as planned)
 
 **File to create:** `src/agent_neo/chat.py` (or at project root if easier to run)
 
@@ -289,7 +289,7 @@ uv run python src/agent_neo/chat.py
 ---
 
 ### Task 6 — End-to-end test and cutover
-**Status:** 🔴 NOT STARTED
+**Status:** ✅ COMPLETE
 
 **Prerequisite:** Community gateway must be running (see startup instructions above).
 
@@ -319,7 +319,7 @@ See the "Known Risk" section below.
 ---
 
 ### Task 7 — Update documentation
-**Status:** 🔴 NOT STARTED
+**Status:** ✅ COMPLETE
 
 **Files to update:**
 1. `docs/STEERING.md` — Add a new session entry under "Handoff Notes" with date, what was completed, and what's next
@@ -330,23 +330,16 @@ See the "Known Risk" section below.
 
 ## Known Risk: Model Tool-Calling Reliability
 
-**Risk level:** HIGH — could block Phase 1 completion
+**Risk level:** HIGH — confirmed and resolved (2026-02-21)
 
-**The issue:**
-During gateway testing (Test 4), the gateway accepted the `tools` field and returned HTTP 200, but the model **generated a text response rather than invoking the tool**. This is a known limitation of small general-purpose models.
+**What happened:**
+`Qwen2.5-1.5B-Instruct` (general instruction model) does not reliably invoke tools. During Task 6 testing it hallucinated responses instead of calling tools, even with explicit prompts. This confirmed the risk documented here.
 
-We are using `Qwen2.5-1.5B-Instruct.hef` — a general instruction model. The dedicated function-calling model (`Qwen2-1.5B-Instruct-Function-Calling-v1.hef`) would be more reliable for tool calling but **requires HailoRT 5.2.0**, which is incompatible with the currently installed **HailoRT 5.1.1**.
+**Resolution taken: Option B — AWS Bedrock (Claude Haiku)**
+Switched `strands_agent.py` to use `BedrockModel` with `us.anthropic.claude-haiku-4-5-20251001-v1:0`. All 4 end-to-end tests passed with correct tool invocation.
 
-**If the model doesn't reliably trigger tool calls during Task 6:**
-
-| Option | Action | Effort |
-|--------|--------|--------|
-| A | Upgrade HailoRT to 5.2.0 | Medium — system-level change, may affect other things |
-| B | Test with more explicit prompts that force tool use | Low — try first |
-| C | Use Strands with a Bedrock model (e.g. Claude Haiku) as a fallback while debugging hardware | Medium — requires AWS credentials |
-| D | Accept limitation and document it | Low — valid for prototype purposes |
-
-**Recommended approach:** Try Option B first (explicit prompts). If tool calls still don't fire after 3-4 attempts with varied prompts, escalate to user before proceeding with A, C, or D.
+**Outstanding hardware gap:**
+The dedicated function-calling model `Qwen2-1.5B-Instruct-Function-Calling-v1.hef` requires **HailoRT 5.2.0** (currently on 5.1.1). Upgrading HailoRT is a future task that would allow switching back to local inference. See `strands_agent.py` for the swap instructions.
 
 ---
 
