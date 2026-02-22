@@ -367,7 +367,67 @@ The compatibility symlink allows the `.so` to load `libhailort`, but cannot inve
 1. Build `pyhailort` from source against 5.2.0 headers (requires Hailo GitHub source)
 2. Obtain pre-built 5.2.0 bindings from Hailo developer zone
 3. User-identified alternatives (TBD)
-4. Roll back to 5.1.1 (bindings work, but function-calling HEF model won't load)
+4. ✅ Rolled back to 5.1.1 — now investigating whether other models (Llama 3.2 3B, DeepSeek R1) support tool calling on 5.1.1
+
+---
+
+## After 5.1.1 Rollback Reboot
+
+**Current state (2026-02-21):** HailoRT rolled back to 5.1.1. Reboot pending. Python bindings verified working with 5.1.1.
+
+**After reboot, run these steps in order. Stop and report on any failure.**
+
+**Step 1 — Verify hardware:**
+```bash
+hailortcli --version          # must show 5.1.1
+hailortcli fw-control identify  # must show HAILO10H, no errors
+python3 -c "import hailo_platform; print('OK')"  # must print OK
+```
+
+**Step 2 — Pull Llama 3.2 3B via hailo-ollama:**
+```bash
+hailo-ollama pull llama3.2:3b
+```
+Wait for download to complete. If it fails with an error, stop and report — do not attempt workarounds.
+
+**Step 3 — Check HEF compiler version:**
+```bash
+hailortcli parse-hef /path/to/llama3.2-3b.hef 2>&1 | head -5
+```
+Find where hailo-ollama stores downloaded HEFs first:
+```bash
+find ~ /var -name "*.hef" 2>/dev/null
+```
+- If `HEF Compiler Version: 5.1.x` → compatible with 5.1.1 runtime, proceed to Step 4
+- If `HEF Compiler Version: 5.2.0` → incompatible with 5.1.1 runtime, stop and report
+
+**Step 4 — Start community gateway with Llama 3.2 3B:**
+```bash
+cd /home/marcomark/Documents/code-projects/ollama_gateway
+export HAILO_HEF_PATH=/path/to/llama3.2-3b.hef
+source .venv_with_system/bin/activate
+python hailo_ollama_gateway.py
+```
+Check startup log — must show `Hailo platform available: True` (not mock mode).
+
+**Step 5 — Test tool calling with Llama 3.2 3B:**
+
+Llama 3.2 3B has a full tool-calling chat template (confirmed from hailo-ollama manifest). Update `strands_agent.py` to use `OllamaModel` with the gateway, then run the Phase 1 test prompts:
+```
+"What time is it?"
+"What's the weather in London?"
+"What's the weather in Tokyo and what time is it?"
+"Tell me a joke"
+```
+Pass criteria: tool calls actually fire for first 3, no tool call for last one.
+
+**Step 6 — If Llama 3.2 3B tool calling passes:**
+- Update docs and commit
+- Plan path back to 5.2.0 (or accept 5.1.1 + Llama 3.2 3B as the solution)
+
+**Step 7 — If Llama 3.2 3B tool calling fails:**
+- Also pull and test `deepseek_r1_distill_qwen:1.5b` (also has tool-calling template)
+- If both fail, report and discuss next steps with user
 
 **Next steps after reboot** (run in order, stop and report on any failure):
 

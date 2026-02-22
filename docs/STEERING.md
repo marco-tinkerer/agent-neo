@@ -164,6 +164,14 @@ Use this section to leave notes for future sessions:
 - Options under investigation: build from source (Hailo GitHub), await Hailo release, roll back to 5.1.1, user has additional alternatives to try
 - **NEXT SESSION: continue Python bindings investigation**
 
+### Session 2026-02-21 (Part 4) — Rolled back to HailoRT 5.1.1
+- hailo-ollama pull llama3.2:3b failed with null pointer error — root cause: hailo-ollama binary links against libhailort.so.5.1.1 which was symlinked to 5.2.0, causing runtime breakage even for network operations
+- model server confirmed reachable at dev-public.hailo.ai:443 (from /etc/xdg/hailo-ollama/hailo-ollama.json)
+- Rolled back to HailoRT 5.1.1: installed h10-hailort 5.1.1 + h10-hailort-pcie-driver 5.1.1 from backup debs
+- Python bindings (hailo_platform) verified importing correctly with 5.1.1
+- Reboot required to activate 5.1.1 driver/firmware
+- **NEXT SESSION: reboot first, then follow steps in STRANDS_INTEGRATION.md "After 5.1.1 Rollback Reboot" section**
+
 ### Session 2026-01-29
 - Replaced httpx with LiteLLM for unified LLM interface
 - LiteLLMProvider replaces HailoOllamaClient
@@ -206,6 +214,8 @@ If uncertain about a decision:
 
 This ensures we tackle problems head-on rather than accumulating technical debt or going down incorrect paths.
 
+**Do not abandon the original approach and try something else without asking first.** There was a reason for the initial plan. Trust that judgement — if it hits a wall, stop and ask rather than pivoting to random alternatives.
+
 ## Server Management
 
 Claude Code can manage the hailo-ollama server during development and testing:
@@ -235,7 +245,7 @@ See `docs/HAILO_SERVER.md` for full server documentation.
 **Tech Stack:** Python 3.13, UV, Strands Agents SDK, AWS Bedrock (Claude Haiku, temporary)
 **Model (current):** `us.anthropic.claude-haiku-4-5-20251001-v1:0` via Bedrock — pending switch to local
 **Model (target):** `Qwen2-1.5B-Instruct-Function-Calling-v1.hef` via community gateway
-**HailoRT:** 5.2.0 installed, awaiting reboot to activate new SoC firmware
+**HailoRT:** 5.1.1 (rolled back temporarily), awaiting reboot to activate 5.1.1 driver/firmware
 **Run command:** `uv run agent-neo`
 
 ---
