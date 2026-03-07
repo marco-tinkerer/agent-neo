@@ -1,35 +1,44 @@
 """Main entry point for Agent Neo."""
 
-from .strands_agent import create_agent
+import asyncio
+import sys
+
+from agent_neo.strands_agent import create_agent
 
 
-def main() -> None:
-    """Run the Agent Neo interactive loop."""
-    print("Agent Neo - Powered by Strands on Raspberry Pi AI HAT+ 2")
-    print("Type 'quit' or 'exit' to end the conversation.\n")
-
+async def async_main():
+    """Asynchronous main loop for the agent."""
+    print("Welcome to Agent Neo (Direct NPU Integration)")
+    print("Type 'exit' or 'quit' to stop.")
+    
     agent = create_agent()
-
+    
     while True:
         try:
-            user_input = input("You: ").strip()
-
+            user_input = input("\nYou: ").strip()
+            if user_input.lower() in ["exit", "quit"]:
+                break
+            
             if not user_input:
                 continue
-
-            if user_input.lower() in ("quit", "exit"):
-                print("Goodbye!")
-                break
-
-            print("Agent Neo: ", end="", flush=True)
-            agent(user_input)
-            print()
-
+                
+            response = await agent.invoke_async(user_input)
+            print(f"\nNeo: {response}")
+            
         except KeyboardInterrupt:
-            print("\nGoodbye!")
             break
         except Exception as e:
-            print(f"\nError: {e}\n")
+            print(f"\nError: {e}")
+
+    print("\nGoodbye!")
+
+
+def main():
+    """Synchronous entry point."""
+    try:
+        asyncio.run(async_main())
+    except KeyboardInterrupt:
+        pass
 
 
 if __name__ == "__main__":

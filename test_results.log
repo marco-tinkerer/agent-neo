@@ -1,0 +1,70 @@
+======================================================================
+HAILO OLLAMA GATEWAY - VALIDATION TEST SUITE
+======================================================================
+
+[PRE-CHECK] Verifying gateway is running...
+✓ Gateway is running on port 11434
+
+[TEST 4] Model listing endpoint...
+✓ Model list endpoint works
+  Available models: 1
+    - hailo-llm
+
+[TEST 1] Basic chat request (no tools)...
+✗ HTTP 503
+  Error: {"detail":"Model not loaded. Set HAILO_HEF_PATH or call /api/pull first."}
+
+[TEST 2] Streaming chat request...
+✗ HTTP 503
+  Error: {"detail":"Model not loaded. Set HAILO_HEF_PATH or call /api/pull first."}
+
+[TEST 3] Chat request WITH tools field (CRITICAL)...
+✗ HTTP 503
+  Error: {"detail":"Model not loaded. Set HAILO_HEF_PATH or call /api/pull first."}
+
+======================================================================
+TEST SUMMARY
+======================================================================
+  model_list           ✓ PASS
+  basic_chat           ✗ FAIL
+  streaming            ✗ FAIL
+  tools                ✗ FAIL
+
+Result: 1/4 tests passed
+
+✗✗✗ TOOLS NOT WORKING. Need to investigate further.
+======================================================================
+HAILO OLLAMA GATEWAY - VALIDATION TEST SUITE
+======================================================================
+
+[PRE-CHECK] Verifying gateway is running...
+✓ Gateway is running on port 11434
+
+[TEST 4] Model listing endpoint...
+✓ Model list endpoint works
+  Available models: 1
+    - /home/marcomark/hailo-models/Qwen2-1.5B-Instruct-Function-Calling-v1.hef
+
+[TEST 1] Basic chat request (no tools)...
+✗ HTTP 503
+  Error: {"detail":"Model not loaded. Set HAILO_HEF_PATH or call /api/pull first."}
+
+[TEST 2] Streaming chat request...
+✗ HTTP 503
+  Error: {"detail":"Model not loaded. Set HAILO_HEF_PATH or call /api/pull first."}
+
+[TEST 3] Chat request WITH tools field (CRITICAL)...
+✗ HTTP 503
+  Error: {"detail":"Model not loaded. Set HAILO_HEF_PATH or call /api/pull first."}
+
+======================================================================
+TEST SUMMARY
+======================================================================
+  model_list           ✓ PASS
+  basic_chat           ✗ FAIL
+  streaming            ✗ FAIL
+  tools                ✗ FAIL
+
+Result: 1/4 tests passed
+
+✗✗✗ TOOLS NOT WORKING. Need to investigate further.

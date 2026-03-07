@@ -74,17 +74,12 @@ agent-neo/
 
 ```bash
 cd /home/marcomark/Documents/code-projects/ollama_gateway
-export HAILO_HEF_PATH=/home/marcomark/hailo-models/Qwen2.5-1.5B-Instruct.hef
-source .venv_with_system/bin/activate
-python hailo_ollama_gateway.py
+HAILO_HEF_PATH=/usr/share/hailo-ollama/models/blob/sha256_1129f5f8384e4e45c5890104dc4ec1aee77e800ce1484ddc3aa942399aada425 \
+.venv_with_system/bin/python hailo_ollama_gateway.py
 ```
 
-Then load the model (separate terminal):
-```bash
-curl -s -X POST http://localhost:11434/api/pull \
-  -H "Content-Type: application/json" \
-  -d '{"name": "/home/marcomark/hailo-models/Qwen2.5-1.5B-Instruct.hef"}'
-```
+Model loads automatically from `HAILO_HEF_PATH` at startup — no separate pull needed.
+Startup log must show: `Loaded manifest, set 3 stop token(s): [...]`
 
 Verify it's running:
 ```bash
@@ -111,13 +106,13 @@ This is a prototype to validate the architecture. Tools are intentionally simple
 
 ## Phase Plan
 
-### Phase 1 — Core Strands Agent + 2 Tools (CURRENT PHASE)
-Get a working Strands agent with tool calling validated end-to-end.
+### Phase 1 — Core Strands Agent + Direct Provider Integration
+**Status:** ✅ COMPLETE
+Environment rebuilt with system-site-packages. Native `hailo_platform` access verified. `HailoModel` implemented and integrated with Strands SDK.
 
-**Tools:** `get_current_time` (type 1) + `get_weather` (type 2)
-
-### Phase 2 — Remaining Tools (FUTURE)
-Add MQTT, Lambda, and Polly tools once Phase 1 is confirmed working.
+### Phase 2 — Remaining Tools
+**Status:** 🟡 IN PROGRESS
+Adding MQTT, Lambda, and Polly tools to complete the prototype tool breadth.
 
 ### Phase 3 — Polish (FUTURE)
 Finalize `main.py` CLI with the Strands agent, update documentation, finalize architecture decisions.
@@ -373,61 +368,59 @@ The compatibility symlink allows the `.so` to load `libhailort`, but cannot inve
 
 ## After 5.1.1 Rollback Reboot
 
-**Current state (2026-02-21):** HailoRT rolled back to 5.1.1. Reboot pending. Python bindings verified working with 5.1.1.
+**Completed: 2026-02-23**
 
-**After reboot, run these steps in order. Stop and report on any failure.**
+**Step 1 — Verify hardware:** ✅
+- `hailortcli --version` → 5.1.1
+- `hailortcli fw-control identify` → HAILO10H, firmware 5.1.1
+- `import hailo_platform` → OK
 
-**Step 1 — Verify hardware:**
-```bash
-hailortcli --version          # must show 5.1.1
-hailortcli fw-control identify  # must show HAILO10H, no errors
-python3 -c "import hailo_platform; print('OK')"  # must print OK
-```
+**Step 2 — Pull Llama 3.2 3B:** ✅
+- HEF at `/usr/share/hailo-ollama/models/blob/sha256_1129f5f8384e4e45c5890104dc4ec1aee77e800ce1484ddc3aa942399aada425` (3.2 GB)
+- hailo-ollama stores blobs in `/usr/share/hailo-ollama/models/blob/`, manifests in `/usr/share/hailo-ollama/models/manifests/`
+- Pull triggered via HTTP API: `POST /api/pull {"name": "llama3.2:3b"}`
 
-**Step 2 — Pull Llama 3.2 3B via hailo-ollama:**
-```bash
-hailo-ollama pull llama3.2:3b
-```
-Wait for download to complete. If it fails with an error, stop and report — do not attempt workarounds.
+**Step 3 — Check HEF compiler version:** ✅
+- `hailortcli parse-hef` shows `HEF Compatible for: HAILO15H, HAILO10H` — no compiler version mismatch error
+- HEF loads and runs on HailoRT 5.1.1 without error
 
-**Step 3 — Check HEF compiler version:**
-```bash
-hailortcli parse-hef /path/to/llama3.2-3b.hef 2>&1 | head -5
-```
-Find where hailo-ollama stores downloaded HEFs first:
-```bash
-find ~ /var -name "*.hef" 2>/dev/null
-```
-- If `HEF Compiler Version: 5.1.x` → compatible with 5.1.1 runtime, proceed to Step 4
-- If `HEF Compiler Version: 5.2.0` → incompatible with 5.1.1 runtime, stop and report
+**Step 4 — Start community gateway with Llama 3.2 3B:** ✅
+- `Hailo platform available: True` confirmed (real hardware, not mock)
+- Gateway must be started with:
+  ```bash
+  cd /home/marcomark/Documents/code-projects/ollama_gateway
+  HAILO_HEF_PATH=/usr/share/hailo-ollama/models/blob/sha256_1129f5f8384e4e45c5890104dc4ec1aee77e800ce1484ddc3aa942399aada425 \
+  .venv_with_system/bin/python hailo_ollama_gateway.py
+  ```
+- Manifest auto-discovered; startup log shows: `Loaded manifest, set 3 stop token(s): ['<|end_of_text|>', '<|eom_id|>', '<|eot_id|>']`
 
-**Step 4 — Start community gateway with Llama 3.2 3B:**
-```bash
-cd /home/marcomark/Documents/code-projects/ollama_gateway
-export HAILO_HEF_PATH=/path/to/llama3.2-3b.hef
-source .venv_with_system/bin/activate
-python hailo_ollama_gateway.py
-```
-Check startup log — must show `Hailo platform available: True` (not mock mode).
+**Gateway improvements made (2026-02-23):**
+- Added Jinja2 chat template rendering from hailo-ollama manifests (Llama 3.2 template applied correctly)
+- Manifest auto-discovered by SHA-256 blob hash matching at startup
+- Stop tokens loaded from manifest and applied via `llm.set_stop_tokens()` + Python-level early exit
+- Special tokens (`<|...|>`) stripped from streamed output
+- `tools` field added to `ChatRequest`; `tool_calls` field added to `ChatMessage`
+- Tool call detection: buffers response when tools present, parses `{"name": ..., "parameters": ...}`, converts to Ollama `tool_calls` format
+- Non-streaming chat now collects streaming path internally (avoids `generate_all` HAILO_INTERNAL_FAILURE crash)
 
-**Step 5 — Test tool calling with Llama 3.2 3B:**
+**Step 5 — Test tool calling with Llama 3.2 3B:** ❌ FAILED
+- Chat template renders correctly; stop tokens fire correctly; streaming works
+- Tool calling unreliable: model produces wrong field names (`"function"` instead of `"name"`, wrong casing) and malformed JSON
+- Root cause: 3B quantized HEF model doesn't reliably follow `{"name": ..., "parameters": ...}` format despite correct prompt
 
-Llama 3.2 3B has a full tool-calling chat template (confirmed from hailo-ollama manifest). Update `strands_agent.py` to use `OllamaModel` with the gateway, then run the Phase 1 test prompts:
-```
-"What time is it?"
-"What's the weather in London?"
-"What's the weather in Tokyo and what time is it?"
-"Tell me a joke"
-```
-Pass criteria: tool calls actually fire for first 3, no tool call for last one.
+**Step 6 — N/A** (Step 5 failed)
 
-**Step 6 — If Llama 3.2 3B tool calling passes:**
-- Update docs and commit
-- Plan path back to 5.2.0 (or accept 5.1.1 + Llama 3.2 3B as the solution)
+**Step 7 — DeepSeek R1 Distill Qwen 1.5B:** NOT TESTED
+- Manifest reviewed: uses DeepSeek-specific special tokens (`<｜tool_calls_begin｜>` etc.), no automatic tool schema injection
+- Would require additional gateway handling; 1.5B size makes reliable tool calling unlikely
+- Deferred pending user decision
 
-**Step 7 — If Llama 3.2 3B tool calling fails:**
-- Also pull and test `deepseek_r1_distill_qwen:1.5b` (also has tool-calling template)
-- If both fail, report and discuss next steps with user
+**Current blocker:** No available local model reliably produces well-formed tool call JSON on HailoRT 5.1.1.
+
+**Options under consideration:**
+1. Proceed with Phase 2 using Bedrock (works today)
+2. Try DeepSeek R1 1.5B (uncertain, requires more gateway work)
+3. Await HailoRT 5.2.0 Python bindings to use `Qwen2-1.5B-Instruct-Function-Calling-v1.hef`
 
 **Next steps after reboot** (run in order, stop and report on any failure):
 
@@ -632,7 +625,7 @@ Update `STEERING.md` session notes and task statuses in this file.
 
 **What we're building:** Strands-based agent with tool calling on Raspberry Pi + Hailo NPU
 
-**Current status:** Phase 1 complete. Phase 2 in progress (5 tools total: time, weather, MQTT, Lambda, Polly).
+**Current status:** Phase 1 complete (Bedrock). Local inference validated (streaming works), but tool calling unreliable on available 5.1.1 models. Phase 2 (MQTT, Lambda, Polly) pending decision on inference backend.
 
 **Approach philosophy (from STEERING.md):**
 - Ask permission before modifying code

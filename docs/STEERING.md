@@ -109,7 +109,7 @@ Use this section to leave notes for future sessions:
 - Any blockers or issues
 ```
 
-**Current Status:** v0.5 - Strands integration complete. Full tool-calling loop validated via AWS Bedrock. HailoRT upgrade to 5.2.0 needed to switch back to local inference.
+**Current Status:** v0.5 - Strands integration complete. Full tool-calling loop validated via AWS Bedrock. Local inference (Llama 3.2 3B on HailoRT 5.1.1) confirmed working but tool-calling unreliable. Awaiting decision on next path.
 
 ### Session 2026-01-28
 - Initialized project with UV
@@ -171,6 +171,39 @@ Use this section to leave notes for future sessions:
 - Python bindings (hailo_platform) verified importing correctly with 5.1.1
 - Reboot required to activate 5.1.1 driver/firmware
 - **NEXT SESSION: reboot first, then follow steps in STRANDS_INTEGRATION.md "After 5.1.1 Rollback Reboot" section**
+
+### Session 2026-02-23 — Post-rollback validation + gateway chat template
+
+**Hardware verified post-reboot:**
+- HailoRT CLI 5.1.1, firmware 5.1.1, HAILO10H, `hailo_platform` imports OK
+
+**llama3.2:3b HEF downloaded:**
+- Blob stored at `/usr/share/hailo-ollama/models/blob/sha256_1129f5f8...` (3.2 GB)
+- HEF parses cleanly on 5.1.1 (`HAILO15H, HAILO10H` compatible, no compiler version error)
+- Streaming inference confirmed working on real hardware (Hailo platform available: True)
+
+**Community gateway significantly improved** (`hailo_ollama_gateway.py`):
+- Added Jinja2 chat template rendering from hailo-ollama manifests
+- Manifest auto-discovered at startup by matching HEF blob SHA-256 hash
+- Stop tokens loaded from manifest and applied via `llm.set_stop_tokens()`
+- Python-level early-exit on stop token (prevents multi-turn hallucination)
+- Special tokens (`<|...|>`) stripped from streamed output
+- `tools` field added to `ChatRequest`; `tool_calls` field added to `ChatMessage`
+- Tool call detection: buffers full response when tools present, parses `{"name": ..., "parameters": ...}` JSON, converts to Ollama `tool_calls` format
+- `chat_full()` removed; non-streaming requests now collect the streaming path (avoids `generate_all` crash with HAILO_INTERNAL_FAILURE on EINTR)
+
+**Llama 3.2 3B tool calling result: UNRELIABLE**
+- Chat template renders correctly; stop tokens fire correctly
+- Model generates coherent chat responses
+- Tool calling fails: model produces wrong field names (`"function"` instead of `"name"`, wrong casing) and malformed JSON — not consistently parseable
+- Root cause: 3B quantized HEF model doesn't reliably follow `{"name": ..., "parameters": ...}` instruction format
+
+**DeepSeek R1 Distill Qwen 1.5B — not tested:**
+- Different tool calling format (DeepSeek special tokens, no automatic schema injection)
+- Would require additional gateway work; 1.5B size makes reliable tool calling unlikely
+- Deferred pending user decision
+
+**Decision pending:** options are (1) proceed with Phase 2 using Bedrock, (2) try DeepSeek 1.5B, (3) wait for HailoRT 5.2.0 Python bindings to use Qwen2-1.5B-Instruct-Function-Calling-v1.hef
 
 ### Session 2026-01-29
 - Replaced httpx with LiteLLM for unified LLM interface
